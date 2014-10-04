@@ -12,6 +12,14 @@ type Broker struct {
 	newClients     chan chan []byte
 	closingClients chan chan []byte
 	clients        map[chan []byte]bool
+	// TODO: clients struct {
+	//    connected bool
+	//    filter_by struct {
+	//       // this would provider-dependent and smart providers, such
+	//       // as journald, would have quite a few options here, while
+	//       // simple once could only have name
+	//    }
+	// }
 }
 
 func NewServer() (broker *Broker) {
