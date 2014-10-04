@@ -20,10 +20,9 @@ func main() {
                 broker.Notifier <- []byte(line.Text)
             }
         } else {
-            panic(err)
+            log.Fatal(err)
         }
     }()
 
     log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:3000", broker))
-
 }
