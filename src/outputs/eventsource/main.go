@@ -1,5 +1,5 @@
 // By all meants based on https://gist.github.com/ismasan/3fb75381cd2deb6bfa9c
-package realtime
+package eventsource
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-type Broker struct {
+type EventSource struct {
 	Notifier       chan []byte
 	newClients     chan chan []byte
 	closingClients chan chan []byte
@@ -22,36 +22,36 @@ type Broker struct {
 	// }
 }
 
-func NewServer() (broker *Broker) {
-	broker = &Broker{
+func NewServer() (eventSource *EventSource) {
+	eventSource = &EventSource{
 		Notifier:       make(chan []byte, 1),
 		newClients:     make(chan chan []byte),
 		closingClients: make(chan chan []byte),
 		clients:        make(map[chan []byte]bool),
 	}
-	go broker.listen()
+	go eventSource.listen()
 
 	return
 }
 
-func (broker *Broker) listen() {
+func (eventSource *EventSource) listen() {
 	for {
 		select {
-		case c := <-broker.newClients:
-			broker.clients[c] = true
-			log.Printf("Client added - total clients: %d", len(broker.clients))
-		case c := <-broker.closingClients:
-			delete(broker.clients, c)
-			log.Printf("Client removed - total clients: %d", len(broker.clients))
-		case e := <-broker.Notifier:
-			for messages, _ := range broker.clients {
+		case c := <-eventSource.newClients:
+			eventSource.clients[c] = true
+			log.Printf("Client added - total clients: %d", len(eventSource.clients))
+		case c := <-eventSource.closingClients:
+			delete(eventSource.clients, c)
+			log.Printf("Client removed - total clients: %d", len(eventSource.clients))
+		case e := <-eventSource.Notifier:
+			for messages, _ := range eventSource.clients {
 				messages <- e
 			}
 		}
 	}
 }
 
-func (broker *Broker) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (eventSource *EventSource) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	flusher, ok := rw.(http.Flusher)
 
 	if !ok {
@@ -65,16 +65,16 @@ func (broker *Broker) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
 	messages := make(chan []byte)
-	broker.newClients <- messages
+	eventSource.newClients <- messages
 
 	defer func() {
-		broker.closingClients <- messages
+		eventSource.closingClients <- messages
 	}()
 
 	closeNotify := rw.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-closeNotify
-		broker.closingClients <- messages
+		eventSource.closingClients <- messages
 	}()
 
 	for {

@@ -6,7 +6,7 @@ import (
 	"inputs/logfile"
 	"log"
 	"net/http"
-	"realtime"
+	"outputs/eventsource"
 )
 
 type Inputs struct {
@@ -25,18 +25,18 @@ func ListInputs(rw http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	broker := realtime.NewServer()
+	events := eventsource.NewServer()
 	router := mux.NewRouter()
 
 	inputs = &Inputs{
 		logfile.Init(),
 	}
 
-	router.HandleFunc("/v0/logs/all/realtime", broker.ServeHTTP).Methods("GET")
+	router.HandleFunc("/v0/logs/all/realtime", events.ServeHTTP).Methods("GET")
 
 	router.HandleFunc("/v0/logs", ListInputs).Methods("GET")
 
-	go inputs.Logfile.Register("test.log", broker.Notifier)
+	go inputs.Logfile.Register("test.log", events.Notifier)
 
 	log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:3000", router))
 }
