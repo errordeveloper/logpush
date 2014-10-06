@@ -10,7 +10,7 @@ import (
 )
 
 type Inputs struct {
-	Logfile *logfile.LogfileInput
+	BasicLineInput *logfile.BasicLineInput
 }
 
 var inputs *Inputs
@@ -29,14 +29,14 @@ func main() {
 	router := mux.NewRouter()
 
 	inputs = &Inputs{
-		logfile.Init(),
+		logfile.InitBasicLineInput(),
 	}
 
 	router.HandleFunc("/v0/logs/all/realtime", events.ServeHTTP).Methods("GET")
 
 	router.HandleFunc("/v0/logs", ListInputs).Methods("GET")
 
-	go inputs.Logfile.Register("test.log", events.Notifier)
+	go inputs.BasicLineInput.Register("test.log", events.Notifier)
 
 	log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:3000", router))
 }
