@@ -6,9 +6,11 @@
 // Portions created by the Initial Developer are Copyright (C) 2013-2014
 // the Initial Developer. All Rights Reserved.
 //
-// Contributor(s):
+// Original authors:
 //   Tanguy Leroux (tlrx.dev@gmail.com)
 //   Rob Miller (rmiller@mozilla.com)
+// Adopted from heka to logpush by:
+//   Ilya Dmitrichenko (errordeveloper@gmail.com)
 
 package elasticsearch
 
