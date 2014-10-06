@@ -25,7 +25,7 @@ type BasicLineInput struct {
 	OpenFiles map[string]*OpenFileInfo
 }
 
-func (this *BasicLineInput) Register(filename string, output chan []byte) {
+func (this *BasicLineInput) Register(filename string, outputs ...chan []byte) {
 	t, err :=
 		tail.TailFile(filename, tail.Config{Follow: true})
 	hostname, _ := os.Hostname()
@@ -42,7 +42,9 @@ func (this *BasicLineInput) Register(filename string, output chan []byte) {
 			}
 			result, err := json.Marshal(m)
 			if err == nil {
-				output <- result
+				for _, output := range outputs {
+					output <- result
+				}
 			} else {
 				log.Fatal(err)
 			}
