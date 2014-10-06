@@ -22,13 +22,14 @@ type EventSource struct {
 	// }
 }
 
-func NewServer() (eventSource *EventSource) {
+func InitListener() (eventSource *EventSource) {
 	eventSource = &EventSource{
 		Notifier:       make(chan []byte, 1),
 		newClients:     make(chan chan []byte),
 		closingClients: make(chan chan []byte),
 		clients:        make(map[chan []byte]bool),
 	}
+
 	go eventSource.listen()
 
 	return
