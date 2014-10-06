@@ -1,11 +1,6 @@
 //package elasticsearch
 package main
 
-//import (
-//	"code.google.com/p/go-uuid/uuid"
-//	"os"
-//	"time"
-//)
 import (
 	///"bytes"
 	///"errors"
@@ -17,8 +12,39 @@ import (
 	///"net/url"
 	///"strings"
 	///"sync"
-	///"time"
+	"time"
 )
+
+func makeIndexPayload(formatedData string) []byte { // ([]byte, error) {
+	preable := fmt.Sprintf(`{"index":{"_index":"logstash-%s","_type":"message"}}`,
+		time.Now().UTC().Format("2006-01-02"))
+
+	return []byte(fmt.Sprintf("%s\n%s", preable, formatedData))
+
+	/*
+		`{
+		   "index":{
+		     "_index":"logstash-2014.10.05",
+		     "_type":"message"
+		   }
+		 }
+		 {
+		   "@uuid":"502291ad-3423-40d2-b64e-7f5b8585b9e1",
+		   "@timestamp":"2014-10-05T13:10:41.509Z",
+		   "@type":"TEST",
+		   "@logger":"GoSpec",
+		   "@severity":6,
+		   "@message":"Test Payload",
+		   "@envversion":"0.8",
+		   "@pid":63759,
+		   "@source_host":"ilya-dmitrichenko.local",
+		   "@fields":{
+		     "foo":"bar",
+		     "number":64
+		   }
+		 }`
+	*/
+}
 
 /*
 func getTestMessage() *Message {
@@ -43,23 +69,11 @@ func getTestMessage() *Message {
 */
 
 func main() {
-	//encoder := new(ESLogstashV0Encoder)
-	//config := encoder.ConfigStruct()
-	//config.(*ESLogstashV0EncoderConfig).RawBytesFields = []string{
-	//	"test_raw_field_string",
-	//	"test_raw_field_bytes",
-	//	"test_raw_field_string_array",
-	//	"test_raw_field_bytes_array",
-	//}
 
-	//_ = encoder.Init(config)
-	//b, _ := encoder.EncodeMessage("Hello!")
+	es := NewUDPBulkIndexer("localhost:9700", 1200)
 
-	x := NewUDPBulkIndexer("localhost:9700", 1200)
 	for {
-		x.Index([]byte(`
-{"index":{"_index":"logstash-2014.10.05","_type":"message"}}
-{"@uuid":"502291ad-3423-40d2-b64e-7f5b8585b9e1","@timestamp":"2014-10-05T13:10:41.509Z","@type":"TEST","@logger":"GoSpec","@severity":6,"@message":"Test Payload","@envversion":"0.8","@pid":63759,"@source_host":"ilya-dmitrichenko.local","@fields":{"foo":"bar","number":64}}`))
+		es.Index(makeIndexPayload("Hello!\n"))
 	}
 }
 
