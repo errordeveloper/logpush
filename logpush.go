@@ -6,6 +6,7 @@ import (
 	"inputs/logfile"
 	"log"
 	"net/http"
+	"outputs/elasticsearch"
 	"outputs/eventsource"
 )
 
@@ -25,7 +26,8 @@ func ListInputs(rw http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	events := eventsource.NewServer()
+	events := eventsource.InitListener()
+	es := elasticsearch.InitListener()
 	router := mux.NewRouter()
 
 	inputs = &Inputs{
@@ -36,7 +38,7 @@ func main() {
 
 	router.HandleFunc("/v0/logs", ListInputs).Methods("GET")
 
-	go inputs.BasicLineInput.Register("test.log", events.Notifier)
+	go inputs.BasicLineInput.Register("test.log", es.Notifier)
 
 	log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:3000", router))
 }
