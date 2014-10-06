@@ -1,25 +1,20 @@
-//package elasticsearch
-package main
+package elasticsearch
 
 import (
-	///"bytes"
-	///"errors"
 	"fmt"
-	//. "github.com/mozilla-services/heka/pipeline"
-	///"io/ioutil"
 	"net"
-	///"net/http"
-	///"net/url"
-	///"strings"
-	///"sync"
 	"time"
 )
 
-func makeIndexPayload(formatedData string) []byte { // ([]byte, error) {
+type ElasticSearch struct {
+	Notifier chan []byte
+}
+
+func makeIndexPayload(formatedData []byte) []byte {
 	preable := fmt.Sprintf(`{"index":{"_index":"logstash-%s","_type":"message"}}`,
 		time.Now().UTC().Format("2006-01-02"))
 
-	return []byte(fmt.Sprintf("%s\n%s", preable, formatedData))
+	return []byte(fmt.Sprintf("%s\n%s\n", preable, formatedData))
 
 	/*
 		`{
@@ -46,34 +41,24 @@ func makeIndexPayload(formatedData string) []byte { // ([]byte, error) {
 	*/
 }
 
-/*
-func getTestMessage() *Message {
-	hostname, _ := os.Hostname()
-	field, _ := NewField("foo", "bar", "")
-	field1, _ := NewField("number", 64, "")
-	msg := &Message{}
-	msg.SetType("TEST")
-	msg.SetTimestamp(time.Now().UnixNano())
-	msg.SetUuid(uuid.NewRandom())
-	msg.SetLogger("GoSpec")
-	msg.SetSeverity(int32(6))
-	msg.SetPayload("Test Payload")
-	msg.SetEnvVersion("0.8")
-	msg.SetPid(int32(os.Getpid()))
-	msg.SetHostname(hostname)
-	msg.AddField(field)
-	msg.AddField(field1)
+func InitListener() (elasticSearch *ElasticSearch) {
+	elasticSearch = &ElasticSearch{
+		Notifier: make(chan []byte, 1),
+	}
 
-	return msg
+	go elasticSearch.listen()
+
+	return
 }
-*/
 
-func main() {
-
+func (elasticSearch *ElasticSearch) listen() {
 	es := NewUDPBulkIndexer("localhost:9700", 1200)
 
 	for {
-		es.Index(makeIndexPayload("Hello!\n"))
+		select {
+		case e := <-elasticSearch.Notifier:
+			es.Index(makeIndexPayload(e))
+		}
 	}
 }
 
