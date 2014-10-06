@@ -1,13 +1,52 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this file,
+// You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// The Initial Developer of the Original Code is the Mozilla Foundation.
+// Portions created by the Initial Developer are Copyright (C) 2013-2014
+// the Initial Developer. All Rights Reserved.
+//
+// Contributor(s):
+//   Tanguy Leroux (tlrx.dev@gmail.com)
+//   Rob Miller (rmiller@mozilla.com)
+
 package elasticsearch
 
 import (
+	_ "bytes"
+	"errors"
 	"fmt"
+	_ "io/ioutil"
+	"log"
 	"net"
+	_ "net/http"
+	"net/url"
+	"strings"
+	"sync"
 	"time"
 )
 
-type ElasticSearch struct {
-	Notifier chan []byte
+type ElasticSearchOutput struct {
+	// Interval at which accumulated messages should be bulk indexed to
+	// ElasticSearch, in milliseconds (default 1000, i.e. 1 second).
+	FlushInterval uint32
+	// Number of messages that triggers a bulk indexation to ElasticSearch
+	// (default to 10)
+	FlushCount int
+	// ElasticSearch server address. This address also defines the Bulk
+	// indexing mode. For example, "http://localhost:9200" defines a server
+	// accessible on localhost and the indexing will be done with the HTTP
+	// Bulk API, whereas "udp://192.168.1.14:9700" defines a server accessible
+	// on the local network and the indexing will be done with the UDP Bulk
+	// API. (default to "http://localhost:9200")
+	Server string
+	// Specify a timeout value in milliseconds for bulk request to complete.
+	// Default is 0 (infinite)
+	HTTPTimeout uint32
+	batchChan   chan []byte
+	backChan    chan []byte
+	bulkIndexer BulkIndexer
+	Notifier    chan []byte
 }
 
 func makeIndexPayload(formatedData []byte) []byte {
@@ -41,9 +80,31 @@ func makeIndexPayload(formatedData []byte) []byte {
 	*/
 }
 
-func InitListener() (elasticSearch *ElasticSearch) {
-	elasticSearch = &ElasticSearch{
-		Notifier: make(chan []byte),
+func InitListener() (elasticSearch *ElasticSearchOutput) {
+	var err error
+	elasticSearch = &ElasticSearchOutput{
+		FlushInterval: 5000,
+		FlushCount:    5,
+		Server:        "udp://localhost:9700",
+		HTTPTimeout:   0,
+		batchChan:     make(chan []byte),
+		backChan:      make(chan []byte, 2),
+		Notifier:      make(chan []byte),
+	}
+
+	var serverUrl *url.URL
+	if serverUrl, err = url.Parse(elasticSearch.Server); err == nil {
+		switch strings.ToLower(serverUrl.Scheme) {
+		//case "http", "https":
+		//	elasticSearch.bulkIndexer = NewHttpBulkIndexer(strings.ToLower(serverUrl.Scheme), serverUrl.Host,
+		//		elasticSearch.FlushCount, elasticSearch.HTTPTimeout)
+		case "udp":
+			elasticSearch.bulkIndexer = NewUDPBulkIndexer(serverUrl.Host, elasticSearch.FlushCount)
+		default:
+			err = errors.New("Server URL must specify one of `udp`, `http`, or `https`.")
+		}
+	} else {
+		err = fmt.Errorf("Unable to parse ElasticSearch server URL [%s]: %s", elasticSearch.Server, err)
 	}
 
 	go elasticSearch.listen()
@@ -51,126 +112,11 @@ func InitListener() (elasticSearch *ElasticSearch) {
 	return
 }
 
-func (elasticSearch *ElasticSearch) listen() {
-	es := NewUDPBulkIndexer("localhost:9700", 1200)
-
-	for {
-		select {
-		case e := <-elasticSearch.Notifier:
-			es.Index(makeIndexPayload(e))
-		}
-	}
-}
-
-/***** BEGIN LICENSE BLOCK *****
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
-#
-# The Initial Developer of the Original Code is the Mozilla Foundation.
-# Portions created by the Initial Developer are Copyright (C) 2013-2014
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Tanguy Leroux (tlrx.dev@gmail.com)
-#   Rob Miller (rmiller@mozilla.com)
-#
-# ***** END LICENSE BLOCK *****/
-
-//package elasticsearch
-
-//import (
-//	"bytes"
-//	"errors"
-//	"fmt"
-//	//. "github.com/mozilla-services/heka/pipeline"
-//	"io/ioutil"
-//	"net"
-//	"net/http"
-//	"net/url"
-//	"strings"
-//	"sync"
-//	"time"
-//)
-
-// Output plugin that index messages to an elasticsearch cluster.
-// Largely based on FileOutput plugin.
-type ElasticSearchOutput struct {
-	flushInterval uint32
-	flushCount    int
-	batchChan     chan []byte
-	backChan      chan []byte
-	// The BulkIndexer used to index documents
-	bulkIndexer BulkIndexer
-
-	// Specify a timeout value in milliseconds for bulk request to complete.
-	// Default is 0 (infinite)
-	http_timeout uint32
-}
-
-/*
-// ConfigStruct for ElasticSearchOutput plugin.
-type ElasticSearchOutputConfig struct {
-	// Interval at which accumulated messages should be bulk indexed to
-	// ElasticSearch, in milliseconds (default 1000, i.e. 1 second).
-	FlushInterval uint32 `toml:"flush_interval"`
-	// Number of messages that triggers a bulk indexation to ElasticSearch
-	// (default to 10)
-	FlushCount int `toml:"flush_count"`
-	// ElasticSearch server address. This address also defines the Bulk
-	// indexing mode. For example, "http://localhost:9200" defines a server
-	// accessible on localhost and the indexing will be done with the HTTP
-	// Bulk API, whereas "udp://192.168.1.14:9700" defines a server accessible
-	// on the local network and the indexing will be done with the UDP Bulk
-	// API. (default to "http://localhost:9200")
-	Server string
-	// Timeout
-	HTTPTimeout uint32 `toml:"http_timeout"`
-}
-
-func (o *ElasticSearchOutput) ConfigStruct() interface{} {
-	return &ElasticSearchOutputConfig{
-		FlushInterval: 1000,
-		FlushCount:    10,
-		Server:        "http://localhost:9200",
-		HTTPTimeout:   0,
-	}
-}
-
-func (o *ElasticSearchOutput) Init(config interface{}) (err error) {
-	conf := config.(*ElasticSearchOutputConfig)
-	o.flushInterval = conf.FlushInterval
-	o.flushCount = conf.FlushCount
-	o.batchChan = make(chan []byte)
-	o.backChan = make(chan []byte, 2)
-	o.http_timeout = conf.HTTPTimeout
-	var serverUrl *url.URL
-	if serverUrl, err = url.Parse(conf.Server); err == nil {
-		switch strings.ToLower(serverUrl.Scheme) {
-		case "http", "https":
-			o.bulkIndexer = NewHttpBulkIndexer(strings.ToLower(serverUrl.Scheme), serverUrl.Host,
-				o.flushCount, o.http_timeout)
-		case "udp":
-			o.bulkIndexer = NewUDPBulkIndexer(serverUrl.Host, o.flushCount)
-		default:
-			err = errors.New("Server URL must specify one of `udp`, `http`, or `https`.")
-		}
-	} else {
-		err = fmt.Errorf("Unable to parse ElasticSearch server URL [%s]: %s", conf.Server, err)
-	}
-	return
-}
-*/
-
-/*
-func (o *ElasticSearchOutput) Run(or OutputRunner, h PluginHelper) (err error) {
-	if or.Encoder() == nil {
-		return errors.New("Encoder must be specified.")
-	}
+func (elasticSearch *ElasticSearchOutput) listen() {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go o.receiver(or, &wg)
-	go o.committer(or, &wg)
+	go elasticSearch.receiver(&wg)
+	go elasticSearch.committer(&wg)
 	wg.Wait()
 	return
 }
@@ -178,51 +124,36 @@ func (o *ElasticSearchOutput) Run(or OutputRunner, h PluginHelper) (err error) {
 // Runs in a separate goroutine, accepting incoming messages, buffering output
 // data until the ticker triggers the buffered data should be put onto the
 // committer channel.
-func (o *ElasticSearchOutput) receiver(or OutputRunner, wg *sync.WaitGroup) {
+func (elasticSearch *ElasticSearchOutput) receiver(wg *sync.WaitGroup) {
 	var (
-		pack     *PipelinePack
-		e        error
-		count    int
-		outBytes []byte
+		count int
 	)
 	ok := true
-	ticker := time.Tick(time.Duration(o.flushInterval) * time.Millisecond)
+	ticker := time.Tick(time.Duration(elasticSearch.FlushInterval) * time.Millisecond)
 	outBatch := make([]byte, 0, 10000)
-	inChan := or.InChan()
 
 	for ok {
 		select {
-		case pack, ok = <-inChan:
-			if !ok {
-				// Closed inChan => we're shutting down, flush data
+		case outBody := <-elasticSearch.Notifier:
+			outBytes := makeIndexPayload(outBody)
+			outBatch = append(outBatch, outBytes...)
+			if count = count + 1; elasticSearch.bulkIndexer.CheckFlush(count, len(outBatch)) {
 				if len(outBatch) > 0 {
-					o.batchChan <- outBatch
-				}
-				close(o.batchChan)
-				break
-			}
-			outBytes, e = or.Encode(pack)
-			pack.Recycle()
-			if e != nil {
-				or.LogError(e)
-			} else {
-				outBatch = append(outBatch, outBytes...)
-				if count = count + 1; o.bulkIndexer.CheckFlush(count, len(outBatch)) {
-					if len(outBatch) > 0 {
-						// This will block until the other side is ready to accept
-						// this batch, so we can't get too far ahead.
-						o.batchChan <- outBatch
-						outBatch = <-o.backChan
-						count = 0
-					}
+					// This will block until the other side is ready to accept
+					// this batch, so we can't get too far ahead.
+					elasticSearch.batchChan <- outBatch
+					outBatch = <-elasticSearch.backChan
+					log.Println("[buffer] Shipping count", count)
+					count = 0
 				}
 			}
 		case <-ticker:
 			if len(outBatch) > 0 {
 				// This will block until the other side is ready to accept
 				// this batch, freeing us to start on the next one.
-				o.batchChan <- outBatch
-				outBatch = <-o.backChan
+				elasticSearch.batchChan <- outBatch
+				outBatch = <-elasticSearch.backChan
+				log.Println("[timer] Shipping count", count)
 				count = 0
 			}
 		}
@@ -233,21 +164,20 @@ func (o *ElasticSearchOutput) receiver(or OutputRunner, wg *sync.WaitGroup) {
 // Runs in a separate goroutine, waits for buffered data on the committer
 // channel, bulk index it out to the elasticsearch cluster, and puts the now
 // empty buffer on the return channel for reuse.
-func (o *ElasticSearchOutput) committer(or OutputRunner, wg *sync.WaitGroup) {
+func (elasticSearch *ElasticSearchOutput) committer(wg *sync.WaitGroup) {
 	initBatch := make([]byte, 0, 10000)
-	o.backChan <- initBatch
+	elasticSearch.backChan <- initBatch
 	var outBatch []byte
 
-	for outBatch = range o.batchChan {
-		if err := o.bulkIndexer.Index(outBatch); err != nil {
-			or.LogError(err)
+	for outBatch = range elasticSearch.batchChan {
+		if err := elasticSearch.bulkIndexer.Index(outBatch); err != nil {
+			log.Fatal(err)
 		}
 		outBatch = outBatch[:0]
-		o.backChan <- outBatch
+		elasticSearch.backChan <- outBatch
 	}
 	wg.Done()
 }
-*/
 
 // A BulkIndexer is used to index documents in ElasticSearch
 type BulkIndexer interface {
@@ -367,11 +297,3 @@ func (u *UDPBulkIndexer) Index(body []byte) error {
 	}
 	return nil
 }
-
-/*
-func init() {
-	RegisterPlugin("ElasticSearchOutput", func() interface{} {
-		return new(ElasticSearchOutput)
-	})
-}
-*/
