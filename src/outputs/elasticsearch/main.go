@@ -43,7 +43,7 @@ func makeIndexPayload(formatedData []byte) []byte {
 
 func InitListener() (elasticSearch *ElasticSearch) {
 	elasticSearch = &ElasticSearch{
-		Notifier: make(chan []byte, 1),
+		Notifier: make(chan []byte),
 	}
 
 	go elasticSearch.listen()
