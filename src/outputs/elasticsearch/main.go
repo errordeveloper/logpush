@@ -145,7 +145,7 @@ func (elasticSearch *ElasticSearchOutput) receiver(wg *sync.WaitGroup) {
 					// this batch, so we can't get too far ahead.
 					elasticSearch.batchChan <- outBatch
 					outBatch = <-elasticSearch.backChan
-					log.Println("[buffer] Shipping count", count)
+					log.Println("[buffer] Shipping", count, "messages")
 					count = 0
 				}
 			}
@@ -155,7 +155,7 @@ func (elasticSearch *ElasticSearchOutput) receiver(wg *sync.WaitGroup) {
 				// this batch, freeing us to start on the next one.
 				elasticSearch.batchChan <- outBatch
 				outBatch = <-elasticSearch.backChan
-				log.Println("[timer] Shipping count", count)
+				log.Println("[timer] Shipping", count, "messages")
 				count = 0
 			}
 		}
