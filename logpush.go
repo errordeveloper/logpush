@@ -57,6 +57,19 @@ func ValidateElasticSearchOuput() {
 
 }
 
+const UI = `<!DOCTYPE html>
+<script>
+(new EventSource("http://localhost:3000/v0/logs/all/realtime"))
+  .onmessage = function(data) {
+    console.log(JSON.parse(data.data));
+};
+</script>
+`
+
+func DoUI(rw http.ResponseWriter, req *http.Request) {
+	rw.Write([]byte(UI))
+}
+
 func ListInputs(rw http.ResponseWriter, req *http.Request) {
 	result, err := json.Marshal(inputs)
 	if err == nil {
@@ -77,6 +90,10 @@ func main() {
 	inputs = &Inputs{
 		logfile.InitBasicLineInput(),
 	}
+
+	router.
+		HandleFunc("/", DoUI).
+		Methods("GET")
 
 	router.
 		HandleFunc("/v0/logs/all/realtime", events.ServeHTTP).
