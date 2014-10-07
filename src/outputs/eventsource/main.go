@@ -65,6 +65,8 @@ func (eventSource *EventSourceOutput) ServeHTTP(rw http.ResponseWriter, req *htt
 	rw.Header().Set("Connection", "keep-alive")
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
+	flusher.Flush()
+
 	messages := make(chan []byte)
 	eventSource.newClients <- messages
 
