@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-type EventSource struct {
+type EventSourceOutput struct {
 	Notifier       chan []byte
 	newClients     chan chan []byte
 	closingClients chan chan []byte
@@ -22,8 +22,8 @@ type EventSource struct {
 	// }
 }
 
-func InitListener() (eventSource *EventSource) {
-	eventSource = &EventSource{
+func InitListener() (eventSource *EventSourceOutput) {
+	eventSource = &EventSourceOutput{
 		Notifier:       make(chan []byte, 1),
 		newClients:     make(chan chan []byte),
 		closingClients: make(chan chan []byte),
@@ -35,7 +35,7 @@ func InitListener() (eventSource *EventSource) {
 	return
 }
 
-func (eventSource *EventSource) listen() {
+func (eventSource *EventSourceOutput) listen() {
 	for {
 		select {
 		case c := <-eventSource.newClients:
@@ -52,7 +52,7 @@ func (eventSource *EventSource) listen() {
 	}
 }
 
-func (eventSource *EventSource) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (eventSource *EventSourceOutput) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	flusher, ok := rw.(http.Flusher)
 
 	if !ok {
