@@ -279,7 +279,10 @@ func (u *UDPBulkIndexer) CheckFlush(count int, length int) bool {
 }
 
 func (u *UDPBulkIndexer) Index(body []byte) error {
-	var err error
+	var (
+		err error
+		w   int
+	)
 	if u.address == nil {
 		if u.address, err = net.ResolveUDPAddr("udp", u.Domain); err != nil {
 			return fmt.Errorf("Error resolving UDP address [%s]: %s", u.Domain, err)
@@ -291,8 +294,12 @@ func (u *UDPBulkIndexer) Index(body []byte) error {
 		}
 	}
 	if u.address != nil {
-		if _, err = u.client.Write(body[:]); err != nil {
+		if w, err = u.client.Write(body[:]); err != nil {
 			return fmt.Errorf("Error writing data to UDP server: %s", err)
+		}
+		log.Println("[indexer] wrote", w, "bytes")
+		if w != len(body[:]) {
+			return fmt.Errorf("Error writing data to UDP server: %d bypes short", (len(body[:]) - w))
 		}
 	} else {
 		return fmt.Errorf("Error writing data to UDP server, address not found")
